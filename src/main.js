@@ -1,4 +1,6 @@
 import "./styles.css";
+import { registerServiceWorker } from "./pwa.js";
+import { generatePuzzle } from "./sudoku-engine.js";
 
 const STORAGE_KEY = "sudoku-game-state-v1";
 const SIZE = 9;
@@ -81,7 +83,6 @@ const ICONS = {
 let store = loadStore();
 let refs = {};
 let loadedFonts = new Set();
-let enginePromise = null;
 let generationToken = 0;
 let isGenerating = false;
 let replacingKey = null;
@@ -91,8 +92,7 @@ mountLayout();
 bindEvents();
 render();
 prepareInitialGame();
-loadPwaRegistration();
-warmEngineChunk();
+registerServiceWorker(refs.saveStatus);
 
 setInterval(renderClock, 500);
 
@@ -735,7 +735,6 @@ async function buildDailyGame(dateKeyValue) {
 }
 
 async function buildGame({ mode, level, seed, dateKey }) {
-  const { generatePuzzle } = await loadEngine();
   const generated = generatePuzzle(LEVELS[level].clues, seed);
   return {
     id: `${mode}:${seed}`,
@@ -759,24 +758,6 @@ async function buildGame({ mode, level, seed, dateKey }) {
     completedAt: null,
     recordedComplete: false
   };
-}
-
-function loadEngine() {
-  enginePromise ||= import("./sudoku-engine.js");
-  return enginePromise;
-}
-
-function warmEngineChunk() {
-  const load = () => {
-    if (!navigator.onLine) return;
-    loadEngine().catch(() => {});
-  };
-
-  if ("requestIdleCallback" in window) {
-    window.requestIdleCallback(load, { timeout: 3000 });
-  } else {
-    window.setTimeout(load, 1500);
-  }
 }
 
 function selectCell(index) {
@@ -1307,10 +1288,4 @@ function formatTime(ms) {
     return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-}
-
-async function loadPwaRegistration() {
-  if (!import.meta.env.PROD) return;
-  const { registerServiceWorker } = await import("./pwa.js");
-  registerServiceWorker(refs.saveStatus);
 }

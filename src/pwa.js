@@ -1,3 +1,6 @@
+const CACHE_MESSAGE_TIMEOUT = 8000;
+let cacheMessageId = 0;
+
 export function registerServiceWorker(saveStatus) {
   if (!("serviceWorker" in navigator) || !import.meta.env.PROD) return;
 
@@ -5,12 +8,18 @@ export function registerServiceWorker(saveStatus) {
     try {
       const registration = await navigator.serviceWorker.register("/sw.js");
       await navigator.serviceWorker.ready;
-      registration.update?.();
+      registration.update?.()?.catch(() => {});
 
-      sendCacheUrls(registration);
-      window.setTimeout(() => sendCacheUrls(registration), 4000);
+      setStatus(saveStatus, "Offline setup");
+      const firstResult = await sendCacheUrls(registration);
+      setStatus(saveStatus, firstResult.failed.length ? "Offline pending" : "Offline ready");
+
+      window.setTimeout(async () => {
+        const secondResult = await sendCacheUrls(registration);
+        setStatus(saveStatus, secondResult.failed.length ? "Offline pending" : "Offline ready");
+      }, 4000);
     } catch {
-      if (saveStatus) saveStatus.textContent = "Offline cache pending";
+      setStatus(saveStatus, "Offline pending");
     }
   };
 
@@ -22,7 +31,28 @@ export function registerServiceWorker(saveStatus) {
 }
 
 function sendCacheUrls(registration) {
-  registration.active?.postMessage({ type: "CACHE_URLS", urls: collectLocalUrls() });
+  const worker = registration.active || navigator.serviceWorker.controller;
+  if (!worker) return Promise.resolve({ failed: ["missing-service-worker"] });
+
+  const id = `cache-${Date.now()}-${++cacheMessageId}`;
+
+  return new Promise((resolve) => {
+    const timeout = window.setTimeout(() => {
+      navigator.serviceWorker.removeEventListener("message", handleMessage);
+      resolve({ failed: ["timeout"] });
+    }, CACHE_MESSAGE_TIMEOUT);
+
+    function handleMessage(event) {
+      if (event.data?.type !== "CACHE_URLS_COMPLETE" || event.data.id !== id) return;
+
+      window.clearTimeout(timeout);
+      navigator.serviceWorker.removeEventListener("message", handleMessage);
+      resolve(event.data);
+    }
+
+    navigator.serviceWorker.addEventListener("message", handleMessage);
+    worker.postMessage({ type: "CACHE_URLS", id, urls: collectLocalUrls() });
+  });
 }
 
 function collectLocalUrls() {
@@ -52,4 +82,8 @@ function collectLocalUrls() {
   });
 
   return [...new Set(urls)];
+}
+
+function setStatus(saveStatus, text) {
+  if (saveStatus) saveStatus.textContent = text;
 }
