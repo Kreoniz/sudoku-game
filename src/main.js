@@ -99,35 +99,26 @@ setInterval(renderClock, 500);
 function mountLayout() {
   document.querySelector("#app").innerHTML = `
     <main class="app-shell">
-      <header class="app-header">
-        <div>
-          <p class="eyebrow">Vanilla Sudoku</p>
-          <h1>Sudoku</h1>
+      <header class="game-topbar">
+        <div class="topbar-copy">
+          <p id="gameLabel" class="meta-label"></p>
+          <h1 id="gameTitle">Sudoku</h1>
         </div>
-        <div class="header-status">
-          <span id="networkStatus" class="status-pill"></span>
-          <span id="saveStatus" class="status-pill status-pill-muted">Saved</span>
+        <div class="topbar-actions">
+          <div class="header-status">
+            <span id="networkStatus" class="status-pill"></span>
+            <span id="saveStatus" class="status-pill status-pill-muted">Saved</span>
+          </div>
+          <div class="timer" id="timer">00:00</div>
+          <button type="button" class="icon-button" data-action="pause" aria-label="Pause" title="Pause">
+            <span class="icon-slot" data-pause-icon>${ICONS.pause}</span>
+            <span class="visually-hidden" data-pause-label>Pause</span>
+          </button>
         </div>
       </header>
 
-      <section class="control-band" aria-label="Game controls">
-        <div class="segmented" id="modeTabs">
-          <button type="button" data-mode="classic">${ICONS.grid}<span>Classic</span></button>
-          <button type="button" data-mode="daily">${ICONS.calendar}<span>Daily</span></button>
-        </div>
-        <div class="difficulty-row" id="difficultyRow"></div>
-      </section>
-
       <section class="play-area">
         <div class="board-panel">
-          <div class="board-meta">
-            <div>
-              <p id="gameLabel" class="meta-label"></p>
-              <h2 id="gameTitle"></h2>
-            </div>
-            <div class="timer" id="timer">00:00</div>
-          </div>
-
           <div class="board-shell">
             <div id="board" class="sudoku-board" role="grid" aria-label="Sudoku board"></div>
             <div id="pauseOverlay" class="pause-overlay" hidden>
@@ -139,7 +130,7 @@ function mountLayout() {
           <div id="message" class="message" role="status"></div>
         </div>
 
-        <aside class="side-panel" aria-label="Game tools">
+        <aside class="side-panel game-tools" aria-label="Game tools">
           <div class="quick-stats">
             <div>
               <span>Mistakes</span>
@@ -158,16 +149,24 @@ function mountLayout() {
           <div id="keypad" class="keypad" aria-label="Number pad"></div>
 
           <div class="tool-grid">
-            <button type="button" data-action="new">${ICONS.plus}<span id="newLabel">New</span></button>
-            <button type="button" data-action="notes">${ICONS.note}<span>Notes</span></button>
-            <button type="button" data-action="undo">${ICONS.undo}<span>Undo</span></button>
-            <button type="button" data-action="erase">${ICONS.erase}<span>Erase</span></button>
-            <button type="button" data-action="hint">${ICONS.hint}<span>Hint</span></button>
-            <button type="button" data-action="pause">${ICONS.pause}<span id="pauseLabel">Pause</span></button>
+            <button type="button" data-action="new" aria-label="New puzzle" title="New puzzle">${ICONS.plus}<span id="newLabel">New</span></button>
+            <button type="button" data-action="notes" aria-label="Notes" title="Notes">${ICONS.note}<span>Notes</span></button>
+            <button type="button" data-action="undo" aria-label="Undo" title="Undo">${ICONS.undo}<span>Undo</span></button>
+            <button type="button" data-action="erase" aria-label="Erase" title="Erase">${ICONS.erase}<span>Erase</span></button>
+            <button type="button" data-action="hint" aria-label="Hint" title="Hint">${ICONS.hint}<span>Hint</span></button>
           </div>
 
-          <div class="settings-panel" id="settingsPanel">
-            <div class="panel-title">${ICONS.settings}<span>Settings</span></div>
+          <details class="compact-panel puzzle-panel" open>
+            <summary>${ICONS.grid}<span>Puzzle</span></summary>
+            <div class="segmented" id="modeTabs">
+              <button type="button" data-mode="classic">${ICONS.grid}<span>Classic</span></button>
+              <button type="button" data-mode="daily">${ICONS.calendar}<span>Daily</span></button>
+            </div>
+            <div class="difficulty-row" id="difficultyRow"></div>
+          </details>
+
+          <details class="compact-panel settings-panel" id="settingsPanel">
+            <summary>${ICONS.settings}<span>Settings</span></summary>
             <div class="settings-controls">
               <label class="toggle-row">
                 <span>Line selection</span>
@@ -204,12 +203,12 @@ function mountLayout() {
                 <input id="showExhaustedNumbers" type="checkbox" data-setting="showExhaustedNumbers" />
               </label>
             </div>
-          </div>
+          </details>
 
-          <div class="stats-panel">
-            <div class="panel-title">${ICONS.trophy}<span>Stats</span></div>
+          <details class="compact-panel stats-panel">
+            <summary>${ICONS.trophy}<span>Stats</span></summary>
             <div id="statsContent" class="stats-content"></div>
-          </div>
+          </details>
         </aside>
       </section>
     </main>
@@ -231,7 +230,9 @@ function mountLayout() {
     hintCount: document.querySelector("#hintCount"),
     clueCount: document.querySelector("#clueCount"),
     newLabel: document.querySelector("#newLabel"),
-    pauseLabel: document.querySelector("#pauseLabel"),
+    pauseButtons: [...document.querySelectorAll('[data-action="pause"]')],
+    pauseIcons: [...document.querySelectorAll("[data-pause-icon]")],
+    pauseLabels: [...document.querySelectorAll("[data-pause-label]")],
     settingsPanel: document.querySelector("#settingsPanel"),
     highlightLines: document.querySelector("#highlightLines"),
     highlightNumbers: document.querySelector("#highlightNumbers"),
@@ -495,6 +496,17 @@ function renderLoadingState() {
   refs.clueCount.textContent = "0";
   refs.newLabel.textContent = "New";
   refs.statsContent.innerHTML = "";
+  refs.pauseButtons.forEach((button) => {
+    button.disabled = true;
+    button.setAttribute("aria-label", "Pause");
+    button.title = "Pause";
+  });
+  refs.pauseIcons.forEach((slot) => {
+    slot.innerHTML = ICONS.pause;
+  });
+  refs.pauseLabels.forEach((label) => {
+    label.textContent = "Pause";
+  });
 
   for (let index = 0; index < CELL_COUNT; index += 1) {
     refs.cells[index].className = "cell is-loading";
@@ -520,23 +532,29 @@ function renderSummary(game) {
   refs.hintCount.textContent = String(game.hints);
   refs.clueCount.textContent = String(game.clues);
   refs.newLabel.textContent = game.mode === "daily" ? "Restart" : "New";
-  refs.pauseLabel.textContent = game.paused ? "Resume" : "Pause";
 
   const notesButton = document.querySelector('[data-action="notes"]');
   const undoButton = document.querySelector('[data-action="undo"]');
   const eraseButton = document.querySelector('[data-action="erase"]');
   const hintButton = document.querySelector('[data-action="hint"]');
-  const pauseButton = document.querySelector('[data-action="pause"]');
+  const pauseText = game.paused ? "Resume" : "Pause";
 
   notesButton.classList.toggle("is-active", store.settings.noteMode);
   notesButton.disabled = game.status === "complete" || game.paused;
   undoButton.disabled = game.undo.length === 0 || game.paused || game.status === "complete";
   eraseButton.disabled = !canEditSelected(game) || game.paused || game.status === "complete";
   hintButton.disabled = game.paused || game.status === "complete";
-  pauseButton.innerHTML = `${game.paused ? ICONS.play : ICONS.pause}<span id="pauseLabel">${
-    game.paused ? "Resume" : "Pause"
-  }</span>`;
-  refs.pauseLabel = document.querySelector("#pauseLabel");
+  refs.pauseButtons.forEach((button) => {
+    button.disabled = game.status === "complete";
+    button.setAttribute("aria-label", pauseText);
+    button.title = pauseText;
+  });
+  refs.pauseIcons.forEach((slot) => {
+    slot.innerHTML = game.paused ? ICONS.play : ICONS.pause;
+  });
+  refs.pauseLabels.forEach((label) => {
+    label.textContent = pauseText;
+  });
 
   if (game.status === "complete") {
     refs.message.textContent = `Complete in ${formatTime(game.elapsed)}.`;

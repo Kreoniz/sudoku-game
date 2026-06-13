@@ -1,20 +1,21 @@
-const CACHE_NAME = "sudoku-game-v9";
+const CACHE_NAME = "sudoku-game-v10";
 const CORE_ASSETS = [
   "/",
   "/index.html",
   "/manifest.webmanifest",
   "/icons/favicon.png",
   "/icons/icon-192.png",
-  "/icons/icon.svg"
+  "/icons/icon-512.png",
+  "/icons/apple-touch-icon.png",
+  "/icons/icon.svg",
+  "/icons/maskable.svg",
+  "/fonts/lexend-latin.woff2",
+  "/fonts/nunito-sans-latin.woff2",
+  "/fonts/roboto-mono-latin.woff2"
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(CORE_ASSETS))
-      .then(() => self.skipWaiting())
-  );
+  event.waitUntil(cacheAppShell().then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
@@ -41,7 +42,7 @@ self.addEventListener("message", (event) => {
         }
       });
 
-      return cache.addAll(urls);
+      return cacheUrls(cache, urls);
     })
   );
 });
@@ -88,4 +89,44 @@ async function findCached(request) {
     (await cache.match(url.href, { ignoreSearch: true })) ||
     (await cache.match(url.pathname, { ignoreSearch: true }))
   );
+}
+
+async function cacheAppShell() {
+  const cache = await caches.open(CACHE_NAME);
+  await cacheUrls(cache, CORE_ASSETS);
+
+  try {
+    const response = await fetch("/", { cache: "reload" });
+    if (!response.ok) return;
+
+    await cache.put("/", response.clone());
+    await cache.put("/index.html", response.clone());
+
+    const html = await response.text();
+    await cacheUrls(cache, extractLocalAssetUrls(html));
+  } catch {
+    // Offline install attempt: runtime fetch handler will fill cache later.
+  }
+}
+
+async function cacheUrls(cache, urls) {
+  const uniqueUrls = [...new Set(urls)];
+  await Promise.allSettled(uniqueUrls.map((url) => cache.add(url)));
+}
+
+function extractLocalAssetUrls(html) {
+  const urls = [];
+  const pattern = /\b(?:src|href)="([^"]+)"/g;
+  let match;
+
+  while ((match = pattern.exec(html))) {
+    try {
+      const url = new URL(match[1], self.location.origin);
+      if (url.origin === self.location.origin) urls.push(url.pathname);
+    } catch {
+      // Ignore malformed markup URLs.
+    }
+  }
+
+  return urls;
 }
